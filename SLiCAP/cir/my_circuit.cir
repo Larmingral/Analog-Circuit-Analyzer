@@ -1,0 +1,7 @@
+"Resistive Divider"
+V1 1 0 {Vi}
+R1 1 2 {R1}
+R2 2 0 {R2}
+.source V1
+.detector V_2
+.end

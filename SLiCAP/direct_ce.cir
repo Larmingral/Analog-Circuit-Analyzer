@@ -1,0 +1,21 @@
+* SLiCAP Netlist for CE Amp
+* Voltage Source
+V1 V_in 0 V_source
+* Input Filter
+Rs V_in 1 {R_s}
+C1 1 2 {C_in}
+* Biasing
+Rb1 2 V_cc {R_b1}
+Rb2 2 0 {R_b2}
+* Transistor (Generic Model)
+Q1 V_c 2 V_e Q_MOD
+* Load & Power
+Rc V_cc V_c {R_c}
+Re V_e 0 {R_e}
+Vcc V_cc 0 {V_cc}
+* Output Load (AC coupled)
+C2 V_c out {C_out}
+RL out 0 {R_L}
+* Model Definition
+.model Q_MOD NPN (BF=200 VAF=100)
+.end

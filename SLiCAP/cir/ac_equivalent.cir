@@ -1,0 +1,24 @@
+* SLiCAP AC Small-Signal Netlist (Final)
+* --- Signal Source ---
+* �ؼ��޸�: ����ʹ�� V_source ���Ͳ�����ACֵ��SLiCAP ����ʶ��Ϊ����Դ
+V1 V_in 0 V_source(1)
+
+* --- Input Network ---
+Rs V_in 1 {R_s}
+C1 1 2 {C_in}
+
+* --- Bias Network (Vcc is AC ground '0') ---
+Rb1 2 0 {R_b1}
+Rb2 2 0 {R_b2}
+
+* --- Transistor Hybrid-Pi Model ---
+R_pi 2 V_e {r_pi}
+G_m V_c V_e 2 V_e {g_m}
+R_o V_c V_e {r_o}
+
+* --- Emitter & Output ---
+Re V_e 0 {R_e}
+Rc V_c 0 {R_c}
+C2 V_c out {C_out}
+RL out 0 {R_L}
+.end

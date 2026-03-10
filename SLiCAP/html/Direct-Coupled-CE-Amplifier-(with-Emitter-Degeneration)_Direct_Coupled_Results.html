@@ -1,0 +1,58 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+<meta name="Language" content="English"/>
+<title>"Direct_Coupled_Results"</title><link rel="stylesheet" href="css/slicap.css">
+<script>MathJax = {tex:{tags: 'ams', inlineMath:[['$','$'],]}, svg:{fontCache:'global'}};</script>
+<script type="text/javascript" id="MathJax-script" async  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head><body><div id="top"><h1>Direct_Coupled_Results</h1></div>
+<h2>Direct Coupled CE Amplifier (with Emitter Degeneration) Analysis</h2>
+<h3>1. Circuit Netlist</h3>
+<p>Note: No capacitors are present, this is a DC gain analysis (frequency independent).</p>
+<p>Re introduces negative feedback (Emitter Degeneration) for bias stability.</p>
+<h2>Netlist: direct_ce.cir</h2>
+<pre>"Direct Coupled CE Amplifier (with Emitter Degeneration)"
+
+V1 in 0 {Vi}
+Rs in b {Rs}
+
+RB b 0 {RB}
+
+rpi b e {rpi}
+G_qm c e b e {gm}
+ro c e {ro}
+
+
+Re e 0 {Re}
+
+Rc c 0 {0}
+RL c 0 {RL}
+
+.source V1
+.detector V_c
+
+.end</pre>
+<h3>2. Original Netlist Parameters</h3>
+<table><caption>Table: Parameter definitions in 'Direct Coupled CE Amplifier (with Emitter Degeneration)'.</caption>
+<tr><th class="left">Name</th><th class="left">Symbolic</th><th class="left">Numeric</th></tr>
+</table>
+<table><caption>Table: Parameters without definition in 'Direct Coupled CE Amplifier (with Emitter Degeneration).</caption>
+
+<tr><th class="left">Name</th></tr>
+<tr><td class="left">$ro$</td></tr>
+<tr><td class="left">$Vi$</td></tr>
+<tr><td class="left">$gm$</td></tr>
+<tr><td class="left">$RL$</td></tr>
+<tr><td class="left">$Re$</td></tr>
+<tr><td class="left">$rpi$</td></tr>
+<tr><td class="left">$Rs$</td></tr>
+<tr><td class="left">$RB$</td></tr>
+</table>
+<!-- INSERT -->
+<div id="footnote">
+<p>Go to <a href="Direct-Coupled-CE-Amplifier-(with-Emitter-Degeneration)_index.html">Direct-Coupled-CE-Amplifier-(with-Emitter-Degeneration)_index</a></p>
+<p>SLiCAP: Symbolic Linear Circuit Analysis Program, Version 4.0.8 &copy 2009-2025 SLiCAP development team</p>
+<p>For documentation, examples, support, updates and courses please visit: <a href="https://analog-electronics.tudelft.nl">analog-electronics.tudelft.nl</a></p>
+<p>Last project update: 2026-02-03 15:21:45</p>
+</div></body></html>

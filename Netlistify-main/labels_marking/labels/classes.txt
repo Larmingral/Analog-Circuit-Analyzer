@@ -1,0 +1,12 @@
+gnd
+pmos
+nmos
+pnp
+npn
+resistor
+capacity
+voltage
+current
+text
+node
+crossing

@@ -1,0 +1,32 @@
+"RC Coupled Common Emitter Amplifier (Small Signal Model)"
+
+V1 in 0 {Vi}
+Rs in 1 {Rs}
+
+*Cin 1 b {Cin}
+
+RB b 0 {RB}
+
+rpi b e {rpi}
+
+
+G_qm c e b e {gm}
+
+ro c e {ro}
+
+
+Re e 0 {Re}
+Ce e 0 {Ce}
+
+
+Rc c 0 {Rc}
+
+
+Cout c out {Cout}
+
+RL out 0 {RL}
+
+.source V1
+.detector V_out
+
+.end
