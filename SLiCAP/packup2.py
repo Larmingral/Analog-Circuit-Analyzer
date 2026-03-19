@@ -8,7 +8,6 @@ from dashscope import Generation
 # 要运行的脚本文件名
 aaa = "demo.py"
 
-
 def read_file_content(filepath):
     """
     读取文件原始文本内容，用于后续喂给大模型。
@@ -92,7 +91,7 @@ def run_my_analysis():
 
         try:
             response = Generation.call(
-                api_key="sk-0a85c32631604fb496aa4a4152f323e5",  # 请替换为真实的API_KEY
+                api_key1 = os.environ.get("DASHSCOPE_API_KEY"),
                 model="qwen-plus",
                 messages=messages,
                 result_format="message"

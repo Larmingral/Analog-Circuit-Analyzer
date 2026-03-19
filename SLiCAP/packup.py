@@ -52,8 +52,7 @@ def run_my_analysis():
 
         try:
             response = Generation.call(
-                api_key="sk-0a85c32631604fb496aa4a4152f323e5",
-                # api_key=os.getenv("DASHSCOPE_API_KEY"),
+                api_key=os.environ.get("DASHSCOPE_API_KEY"),
                 model="qwen-plus",
                 messages=messages,
                 result_format="message"

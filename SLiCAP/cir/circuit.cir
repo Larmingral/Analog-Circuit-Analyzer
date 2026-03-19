@@ -1,16 +1,13 @@
 Vcc vcc 0 V value = {Vcc}
 Vs in 0 V value = {Vs}
 
-Rs in 0 R value = {Rs}
-Rb1 b1 b R value = {Rb1}
-Rb2 vcc b R value = {Rb2}
-Re vcc c R value = {Re}
+Rs vcc in R value = {Rs}
+
+Re vcc out R value = {Re}
+
 Rl out 0 R value = {Rl}
 
-C1 in b1 C value = {C1}
-C2 out c C value = {C2}
-
-Q out b 0 0 QV gm = {gm} gpi = {gpi}
+Q out vcc 0 0 QV gm = {gm} gpi = {gpi}
 
 .source Vs
 .detector V_out
