@@ -82,8 +82,8 @@ def run_my_analysis():
         file_content = f"【错误】：读取网表失败：{str(e)}"
 
     # 3. 读取生成的两个 HTML 分析结果，并直接转化为纯净的 Markdown 公式
-    raw_laplace = read_file_content("./html/Vcc_Laplace-Transfer.html")
-    raw_matrix = read_file_content("./html/Vcc_Matrix-Equations.html")
+    raw_laplace = read_file_content("./html/Vdd_Laplace-Transfer.html")
+    raw_matrix = read_file_content("./html/Vdd_Matrix-Equations.html")
 
     md_laplace = parse_slicap_to_markdown(raw_laplace)
     md_matrix = parse_slicap_to_markdown(raw_matrix)

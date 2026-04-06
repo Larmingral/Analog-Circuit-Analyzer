@@ -5,7 +5,8 @@ Vin in 0 V value={Vin}
 Rd Vdd out R value={Rd}
 Rs net1 0 R value={Rs}
 
-M1 out in net1 0 M gm={gm} cdg={cdg} cgs={cgs}
+M1 out in net1 0 M gm={gm} cgs={cgs} cdg={cdg}
+
 .source Vin
 .detector V_out
 .end
