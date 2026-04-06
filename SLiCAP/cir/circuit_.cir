@@ -1,0 +1,14 @@
+Vcc vcc 0 V value = {Vcc}
+Vs in 0 V value = {Vs}
+
+Rs vcc in R value = {Rs}
+
+Re vcc out R value = {Re}
+
+Rl out 0 R value = {Rl}
+
+Q out vcc 0 0 QV gm = {gm} gpi = {gpi}
+
+.source Vs
+.detector V_out
+.end

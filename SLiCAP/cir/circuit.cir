@@ -1,14 +1,12 @@
-Vcc vcc 0 V value = {Vcc}
-Vs in 0 V value = {Vs}
 
-Rs vcc in R value = {Rs}
+Vdd Vdd 0 V dc={Vdd} value=0
+Vin in 0 V value={Vin} 
 
-Re vcc out R value = {Re}
+Rd Vdd out R value={Rd}
+Rs net1 0 R value={Rs}
 
-Rl out 0 R value = {Rl}
+M1 out in net1 0 M gm={gm} cgs={cgs} cdg={cdg}
 
-Q out vcc 0 0 QV gm = {gm} gpi = {gpi}
-
-.source Vs
+.source Vin
 .detector V_out
 .end

@@ -1,0 +1,16 @@
+cfbVamp
+* file: cfbVamp.cir
+* SLiCAP circuit file
+V1 1 0 V value = {V_s}
+R1 1 2 R value = {R_s}
+R2 4 0 R value = {R_ell}
+R3 4 5 R value = {R_a}
+R4 5 0 R value = {R_b}
+G1 3 5 2 5 G value = {g_m}
+
+V_sense 0 3 V value = 0
+H1 4 0 V_sense H value={A_r}
+
+.source V1
+.detector V_4
+.end
