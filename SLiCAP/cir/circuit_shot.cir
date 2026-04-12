@@ -1,4 +1,4 @@
-Vcc vcc 0 V value = {Vcc}
+Vcc vcc 0 V dc = {Vcc} value = 0
 Vs in 0 V value = {Vs}
 
 Rs vcc in R value = {Rs}
