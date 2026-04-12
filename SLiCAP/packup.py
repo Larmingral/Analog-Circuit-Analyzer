@@ -2,52 +2,135 @@ import gradio as gr
 import os
 import subprocess
 import matplotlib.pyplot as plt
+import re
 from dashscope import Generation
 
 # 要运行的脚本文件名
-aaa = "test_slicap.py"
-# 全局变量存储大模型分析结果（解决作用域问题）
-llm_analysis_result = ""
-file_content = ""
+aaa = "demo.py"
 
-def run_my_analysis():
-    """核心分析函数：运行脚本 + 调用大模型 + 生成图表"""
-    global llm_analysis_result
-    llm_analysis_result = ""  # 每次运行先清空
 
-    # 1. 运行外部Python脚本，捕获输出和错误
-    # 修复：shell=True时命令要传字符串，且统一编码避免乱码
+def read_file_content(filepath):
+    """读取文件原始文本内容"""
+    if not os.path.exists(filepath):
+        return None
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"读取出错: {str(e)}"
+
+
+def parse_slicap_to_markdown(html_content):
+    """
+    【全新核心逻辑】：将 SLiCAP 导出的 HTML 智能解析转换为 Gradio 原生支持的 Markdown + KaTeX 公式。
+    """
+    if not html_content:
+        return "*未找到生成的 HTML 文件，请检查分析脚本是否成功运行。*"
+    if html_content.startswith("读取出错"):
+        return f"**{html_content}**"
+
+    body_match = re.search(r'<body.*?>(.*?)</body>', html_content, re.DOTALL | re.IGNORECASE)
+    text = body_match.group(1) if body_match else html_content
+    text = re.sub(r'<div id="top">.*?</div>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<div id="footnote">.*?</div>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<!-- INSERT -->', '', text, flags=re.IGNORECASE)
+
+    def replace_eq(match):
+        eq_core = match.group(1).strip()
+        return f"\n\n$$\n{eq_core}\n$$\n\n"
+
+    text = re.sub(r'\\begin\{equation\*?\}(.*?)\\end\{equation\*?\}', replace_eq, text, flags=re.DOTALL)
+
+    def replace_eqnarray(match):
+        eq_core = match.group(1).strip()
+        return f"\n\n$$\n\\begin{{aligned}}\n{eq_core}\n\\end{{aligned}}\n$$\n\n"
+
+    text = re.sub(r'\\begin\{eqnarray\*?\}(.*?)\\end\{eqnarray\*?\}', replace_eqnarray, text, flags=re.DOTALL)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def mock_image_to_netlist(image_path):
+    """
+    【预留的图片转网表函数】：
+    目前功能没做完，所以这只是个占位符。
+    未来这里将接入你的图像识别算法。当前为了跑通流程，它会尝试读取本地默认网表返回。
+    """
+    if not image_path:
+        return "请先上传或拍摄图片！"
+
+    # 临时逻辑：尝试读取现有的 circuit.cir，如果读不到则给一个示例模板
+    try:
+        with open("./cir/circuit.cir", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return "*这是一个占位符*\n*未来这里会显示识别出来的网表*\nV1 1 0 5V\nR1 1 2 1k\n..."
+
+
+def run_my_analysis(ui_netlist_text):
+    """
+    核心分析函数：接收前端右侧文本框里的网表 -> 写入文件 -> 运行脚本 -> 读取公式 -> 调用大模型 -> 生成图表
+    """
+    if not ui_netlist_text or ui_netlist_text.strip() == "":
+        return "错误：网表内容为空", "错误：网表内容为空", "大模型分析失败：未提供网表。", None
+
+    # 【新加逻辑】：把前端传过来的/编辑后的网表，先写回到 ./cir/circuit.cir 文件中，
+    # 这样后续外部的 demo.py 才能读取到最新的网表进行分析。
+    os.makedirs("./cir", exist_ok=True)
+    try:
+        with open("./cir/circuit.cir", "w", encoding="utf-8") as f:
+            f.write(ui_netlist_text)
+    except Exception as e:
+        return f"写入网表出错", f"写入网表出错", f"保存网表文件失败: {str(e)}", None
+
+    # 1. 运行外部Python脚本
     result = subprocess.run(
-        f"python {aaa}",  # shell=True时用字符串格式
+        f"python {aaa}",
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         encoding="utf-8",
-        errors="ignore"  # 忽略编码错误，避免程序崩溃
+        errors="ignore"
     )
 
-    # 整理脚本运行结果
-    analysis_result = result.stdout
+    # 2. 读取生成的两个 HTML 分析结果，并直接转化为纯净的 Markdown 公式
+    raw_laplace = read_file_content("./html/Vdd_Laplace-Transfer.html")
+    raw_matrix = read_file_content("./html/Vdd_Matrix-Equations.html")
+
+    md_laplace = parse_slicap_to_markdown(raw_laplace)
+    md_matrix = parse_slicap_to_markdown(raw_matrix)
+
+    # 3. 构建给大模型的数据上下文
+    llm_context = ""
+    if md_laplace and "未找到" not in md_laplace:
+        llm_context += f"--- 传递函数 (Laplace Transfer) ---\n{md_laplace}\n\n"
+    if md_matrix and "未找到" not in md_matrix:
+        llm_context += f"--- 矩阵方程 (Matrix Equations) ---\n{md_matrix}\n\n"
+
     if result.stderr:
-        analysis_result += f"\n\n【程序运行提示】：{result.stderr}"
+        llm_context += f"--- 脚本错误日志参考 ---\n{result.stderr}\n\n"
 
-    # 2. 读取电路网表文件
-    try:
-        with open("./cir/my_circuit.cir", "r", encoding="utf-8") as f:
-            file_content = f.read()
-    except FileNotFoundError:
-        analysis_result += "\n\n【警告】：未找到电路网表文件 ./cir/my_circuit.cir，请检查路径！"
-        file_content = ""
-    except Exception as e:
-        analysis_result += f"\n\n【文件读取错误】：{str(e)}"
-        file_content = ""
-
-    # 3. 调用通义千问大模型分析结果
-    if file_content and analysis_result.strip():
+    # 4. 调用大模型
+    llm_analysis_result = ""
+    if ui_netlist_text and llm_context.strip():
         messages = [
             {'role': 'system',
-             'content': '你是一个电路分析的助手，请根据网表和生成的分析结果，对电路性能进行一个简要的分析和概述，语言简洁明了。'},
-            {'role': 'user', 'content': f'请分析以下电路分析结果：{analysis_result}\n\n对应的电路网表是：{file_content}'}
+             'content': (
+                 "你是一位顶级的电子电路分析专家。我将为你提供电路的网表文件（Netlist）以及通过 SLiCAP 提取的电路公式（传递函数和矩阵方程）。\n"
+                 "请严格按照以下四个模块的顺序和格式进行输出：\n\n"
+                 "### 一、 电路拓扑与基础分析\n（必须使用 Markdown 表格）\n\n"
+                 "### 二、 拉普拉斯传递函数 (Laplace Transfer)\n"
+                 "### 三、 节点电压矩阵方程 (Matrix Equations)\n"
+                 "### 四、 综合性能评估\n"
+                 "⚠️ 【极度重要的排版规范】：\n"
+                 "正文中的所有行内变量、带下标的符号绝对禁止使用单美元符号 `$ ... $` 包裹，务必全部使用 `\\( ... \\)` 来包裹！"
+             )},
+            {'role': 'user',
+             'content': (
+                 f"请根据上述要求的格式，为以下电路生成专业的分析报告。\n\n"
+                 f"【提取的公式内容】：\n{llm_context}\n\n"
+                 f"【原电路网表内容】：\n{ui_netlist_text}"
+             )}
         ]
 
         try:
@@ -64,53 +147,90 @@ def run_my_analysis():
         except Exception as e:
             llm_analysis_result = f"大模型调用异常：{str(e)}"
     else:
-        llm_analysis_result = "无法调用大模型：脚本运行结果或电路网表为空"
+        llm_analysis_result = "无法调用大模型：生成的分析文件缺失或网表为空。"
 
-
-    fig = plt.figure(figsize=(6, 3))
+    # 5. 生成图表
+    fig = plt.figure(figsize=(8, 4))
     plt.text(0.5, 0.5, "分析数据图表（后续可替换）", ha="center", fontsize=12)
     plt.axis("off")
-
     plt.close(fig)
-    return analysis_result, llm_analysis_result, fig
+
+    return md_laplace, md_matrix, llm_analysis_result, fig
 
 
 # 构建Gradio界面
-with gr.Blocks(theme=gr.themes.Soft(), title="我的分析工具") as demo:
-    gr.Markdown("### 📝 一键电路分析工具")
+with gr.Blocks(theme=gr.themes.Soft(), title="智能电路识别与分析系统") as demo:
+    gr.Markdown("### 📝 智能电路图识别与一键分析工具")
 
+    # ================= 核心改造区域：图像输入与网表预留区 =================
     with gr.Row():
-        # 左栏：分析结果
-        with gr.Column():
-            res_text1 = gr.Textbox(
-                label="分析结果（终端输出）",
-                lines=12,
-                placeholder="点击分析，结果会显示在这里~"
+        # 左栏：图像输入区
+        with gr.Column(scale=1):
+            gr.Markdown("#### 📷 1. 拍摄或上传电路图")
+            # sources=["upload", "webcam", "clipboard"] 让这个组件同时支持：文件上传、摄像头拍照、剪贴板粘贴
+            img_input = gr.Image(
+                sources=["upload", "webcam", "clipboard"],
+                type="filepath",
+                label="上传电路图片"
             )
-        # 右栏：原网表内容
-        with gr.Column():
-            file_content = gr.Textbox(
-                label="原电路网表内容",
+            # 预留的转换按钮
+            btn_img_to_netlist = gr.Button("⚡ 识别提取网表 (功能预留)", variant="secondary")
+
+        # 右栏：网表文本区
+        with gr.Column(scale=1):
+            gr.Markdown("#### 📜 2. 电路网表内容 (可手动编写)")
+            circuit_text = gr.Textbox(
                 lines=12,
-                placeholder="网表内容会在这里展示~",
-                interactive=False  # 设为只读，避免用户修改
+                show_label=False,
+                placeholder="网表内容将在这里生成，你也可以直接在这里手动编写或修改~",
+                interactive=True  # 设置为True，允许用户手动修改网表内容
             )
+            # 点击后才对右侧的内容进行深度分析
+            btn_analyze = gr.Button("🚀 3. 根据网表开始分析", variant="primary")
 
-    res_text2 = gr.Textbox(label="大模型分析结果", lines=8, placeholder="点击分析，结果会显示在这里~")
-    res_fig = gr.Plot(label="结果图表")  # 后续加图表直接用
+    gr.Markdown("---")
 
-    # 分析按钮
-    btn = gr.Button("开始分析", variant="primary", size="lg")
+    # ================= 瀑布流结果展示区 =================
+    gr.Markdown("#### 📐 Laplace Transfer (拉普拉斯传递函数)")
+    out_laplace = gr.Markdown()
 
-    # 绑定按钮事件：点击后运行分析函数，输出三个结果
-    btn.click(run_my_analysis, outputs=[res_text1, res_text2, res_fig])
+    gr.Markdown("#### 🧮 Matrix Equations (矩阵方程)")
+    out_matrix = gr.Markdown()
 
-# 启动工具
+    gr.Markdown("#### 🤖 大模型深度分析结果")
+    res_markdown = gr.Markdown(
+        value="等待分析...",
+        latex_delimiters=[
+            {"left": "$$", "right": "$$", "display": True},
+            {"left": r"\(", "right": r"\)", "display": False},
+            {"left": "$", "right": "$", "display": False}
+        ]
+    )
+
+    gr.Markdown("#### 📊 结果图表")
+    res_fig = gr.Plot()
+
+    # ================= 事件绑定 =================
+
+    # 动作 1：图片转网表（绑定占位函数）
+    btn_img_to_netlist.click(
+        fn=mock_image_to_netlist,
+        inputs=[img_input],
+        outputs=[circuit_text]
+    )
+
+    # 动作 2：网表分析核心流程
+    # 注意：这里的 inputs 改为了 circuit_text，意味着分析函数使用的是当前文本框里的网表数据
+    btn_analyze.click(
+        fn=run_my_analysis,
+        inputs=[circuit_text],
+        outputs=[out_laplace, out_matrix, res_markdown, res_fig]
+    )
+
 if __name__ == "__main__":
-    # 可选：设置share=True生成公网链接，server_port指定端口
     demo.launch(
         server_name="127.0.0.1",
         server_port=7860,
         share=False,
-        max_threads=16
+        max_threads=1
     )
