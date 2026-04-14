@@ -235,9 +235,13 @@ with gr.Blocks(theme=gr.themes.Soft(), title="智能电路识别与分析系统"
     )
 
 if __name__ == "__main__":
+    ################此处一定要确保读到系统变量，否则会有none漏洞##############
+    user = os.environ.get("TEST_USER")
+    psw = os.environ.get("TEST_PSW")
     demo.launch(
         server_name="127.0.0.1",
         server_port=7860,
+        auth=(user,psw),
         share=False,
         max_threads=1
     )
