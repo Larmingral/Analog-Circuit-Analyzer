@@ -7,7 +7,7 @@ sl.initProject("demo")
 cirName = "circuit_bode"
 fileName = cirName + ".cir"
 
-dst = "cir"
+dst = "../cir"
 
 #创建电路对象
 cir = sl.makeCircuit(fileName)
@@ -35,11 +35,11 @@ LaplaceResult = sl.doLaplace(cir, pardefs="circuit", numeric=True)
 
 sl.htmlPage("Plot1")
 #Magnitude
-f_dBm = sl.plotSweep("f_dBm", "dB Magnitude plot", LaplaceResult, 0.01, 1000, 200, 
+f_dBm = sl.plotSweep("f_dBm", "dB Magnitude plot", LaplaceResult, 0.001, 1000000, 200,
                      sweepScale="M", yUnits="V", funcType="dBmag")
 
 #Phase
-f_phs = sl.plotSweep("f_phs", "Phase plot", LaplaceResult, 0.01, 1000, 200, 
+f_phs = sl.plotSweep("f_phs", "Phase plot", LaplaceResult, 0.001, 1000000, 200,
                      sweepScale="M", yUnits="V", funcType="phase")
 
 sl.fig2html(f_dBm, 800)

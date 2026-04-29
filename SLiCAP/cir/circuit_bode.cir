@@ -6,7 +6,6 @@ R2 3 0 R value={R_ell}
 R3 3 4 R value={R_a}
 R4 4 0 R value={R_b}
 
-
 .model mycfb OC
 + cp={C_i}
 + gp={1/R_i}

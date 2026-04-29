@@ -241,7 +241,7 @@ if __name__ == "__main__":
     demo.launch(
         server_name="127.0.0.1",
         server_port=7860,
-        auth=(user,psw),
+        #auth=(user,psw),
         share=False,
         max_threads=1
     )

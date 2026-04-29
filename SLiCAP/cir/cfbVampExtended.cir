@@ -1,10 +1,11 @@
 cfbVampExtended
-* file: cfbVampExtended.cir
-* SLiCAP circuit file
 V1 1 0 V value = {V_s}
 R1 1 2 R value = {R_s}
-
 O1 2 4 3 0 Mycfb
+R2 3 0 R value = {R_ell}
+R3 3 4 R value = {R_a}
+R4 4 0 R value = {R_b}
+
 .model Mycfb OC
 + cp={C_i}
 + gp={1/R_i}
@@ -14,9 +15,7 @@ O1 2 4 3 0 Mycfb
 + zt={R_t/(1+s*tau)}
 + zo={R_o/(1+s*tau)}
 
-R2 3 0 R value = {R_ell}
-R3 3 4 R value = {R_a}
-R4 4 0 R value = {R_b}
+
 
 .param C_i=5p R_i=1M g_m=20m R_t=1M R_o=2k tau=50u R_a=2k R_b=500 R_s=100 R_ell=500 V_s=1 C_d=2p R_d=10k
 
