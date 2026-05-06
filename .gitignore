@@ -4,3 +4,7 @@ SLiCAP/SLiCAP.ini
 SLiCAP/cir/circuit.cir
 SLiCAP/SLiCAP.ini
 SLiCAP/cir/circuit.cir
+SLiCAP/backend_logs/
+SLiCAP/SLiCAP.ini
+/SLiCAP/__pycache__
+SLiCAP/analysis_bkup.py

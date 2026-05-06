@@ -12,16 +12,25 @@ def read_file_content(filepath):
     except Exception as e:
         return f"读取出错: {str(e)}"
 
+def clean_old_html(directory, suffix):
+    """【新功能】：运行分析前，强制清理掉旧的 HTML 文件，防止报错时读取到过时数据"""
+    if not os.path.exists(directory):
+        return
+    pattern = os.path.join(directory, f"*{suffix}")
+    for f in glob.glob(pattern):
+        try:
+            os.remove(f)
+        except Exception:
+            pass
+
 def get_latest_html(directory, suffix):
     """智能寻找目录下后缀匹配的最新文件"""
     if not os.path.exists(directory):
         return None
-    # 拼接查找模式，比如 ./html/*Laplace-Transfer.html
     pattern = os.path.join(directory, f"*{suffix}")
     files = glob.glob(pattern)
     if not files:
         return None
-    # 按文件的最后修改时间寻找最新的一个
     latest_file = max(files, key=os.path.getmtime)
     return latest_file
 
