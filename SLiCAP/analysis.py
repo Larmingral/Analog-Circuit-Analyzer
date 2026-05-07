@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 import matplotlib.pyplot as plt
 import gradio as gr
@@ -50,7 +51,14 @@ def run_my_analysis(ui_netlist_text, analysis_types):
     # 2. 【修复时序问题】：先清理旧的 Laplace 文件，再执行脚本
     if is_laplace_selected:
         clean_old_html("./html", "Laplace-Transfer.html")
-        subprocess.run("python run_laplace.py", shell=True, errors="ignore")
+
+        # 捕获报错信息，不再静默失败
+        result = subprocess.run(
+            [sys.executable, "run_laplace.py"],
+            capture_output=True, text=True, encoding="utf-8", errors="ignore"
+        )
+        if result.returncode != 0:
+            print(f"❌ [拉普拉斯脚本崩溃] 详细报错如下：\n{result.stderr}")
 
         latest_lap = get_latest_html("./html", "Laplace-Transfer.html")
         if latest_lap:
@@ -63,7 +71,13 @@ def run_my_analysis(ui_netlist_text, analysis_types):
     # 3. 【修复时序问题】：先清理旧的 Matrix 文件，再执行脚本
     if is_matrix_selected:
         clean_old_html("./html", "Matrix-Equations.html")
-        subprocess.run("python run_matrix.py", shell=True, errors="ignore")
+
+        result = subprocess.run(
+            [sys.executable, "run_matrix.py"],
+            capture_output=True, text=True, encoding="utf-8", errors="ignore"
+        )
+        if result.returncode != 0:
+            print(f"❌ [矩阵脚本崩溃] 详细报错如下：\n{result.stderr}")
 
         latest_mat = get_latest_html("./html", "Matrix-Equations.html")
         if latest_mat:

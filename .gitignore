@@ -8,3 +8,5 @@ SLiCAP/backend_logs/
 SLiCAP/SLiCAP.ini
 /SLiCAP/__pycache__
 SLiCAP/analysis_bkup.py
+/SLiCAP/.idea
+/SLiCAP/__pycache__
