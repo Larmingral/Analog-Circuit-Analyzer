@@ -109,7 +109,7 @@ def run_my_analysis(ui_netlist_text, analysis_types):
         try:
             response = Generation.call(
                 api_key=os.environ.get("DASHSCOPE_API_KEY"),
-                model="qwen-plus", messages=messages, result_format="message"
+                model="deepseek-v4-flash", messages=messages, result_format="message"
             )
             if response.status_code == 200:
                 llm_analysis_result = response.output.choices[0].message.content

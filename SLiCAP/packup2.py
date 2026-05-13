@@ -45,8 +45,6 @@ with gr.Blocks(theme=gr.themes.Soft(), title="智能电路分析系统") as demo
     gr.Markdown("---")
 
     gr.Markdown("### ⚙️ 第二步：MOS 管参数实时配置")
-    gr.Markdown(
-        "*注意：由于组件特性，表格允许您增加或删除行。这**不会引起系统错误**，系统后台会自动过滤并丢弃无效的干扰行，您只需专注勾选参数即可。*")
 
     # 【改进点 2】：利用我们写的 sync_text_to_df 函数，在页面渲染前直接算出默认表格状态，并填入 value
     initial_df_state = sync_text_to_df(DEFAULT_NETLIST, [])
