@@ -76,9 +76,16 @@ with gr.Blocks(theme=gr.themes.Soft(), title="智能电路分析系统") as demo
         out_bode_mag = gr.Image(type="filepath", visible=False, label="波特幅度图 (高清PNG)", interactive=False)
         out_bode_phs = gr.Image(type="filepath", visible=False, label="波特相位图 (高清PNG)", interactive=False)
 
-    gr.Markdown("#### 🤖 大模型深度分析报告")
-    res_markdown = gr.Markdown(latex_delimiters=[{"left": "$$", "right": "$$", "display": True},
-                                                 {"left": r"\(", "right": r"\)", "display": False}])
+    gr.Markdown("#### 🤖 大模型深度分析结果")
+    res_markdown = gr.Markdown(
+        value="大模型根据公式推导的分析结果会显示在这里~",
+        latex_delimiters=[
+            {"left": "$$", "right": "$$", "display": True},
+            {"left": r"\(", "right": r"\)", "display": False},
+            {"left": "$", "right": "$", "display": False},
+            {"left": "[", "right": "]", "display": False}
+        ]
+    )
     res_fig = gr.Plot(visible=False)
 
     # ---------------- 事件绑定 ----------------
