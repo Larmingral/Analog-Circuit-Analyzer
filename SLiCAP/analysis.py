@@ -5,147 +5,157 @@ import matplotlib.pyplot as plt
 import gradio as gr
 import datetime
 from dashscope import Generation
-from utils import read_file_content, get_latest_html, parse_slicap_to_markdown, clean_old_html
+from utils import read_file_content, get_latest_html, parse_slicap_to_markdown, clean_old_html, convert_pdf_to_png
+import matplotlib
+matplotlib.use('Agg')
 
-
-def save_backend_log(netlist, laplace_md, matrix_md, llm_result, analysis_types):
-    """【新功能】：后台静默保存每次测试的详细数据，方便开发者复盘与调试"""
+def save_backend_log(netlist, laplace_md, matrix_md, bode_mag_path, bode_phs_path, llm_result, analysis_types):
+    """恢复后台静默日志留存功能"""
     log_dir = "./backend_logs"
     os.makedirs(log_dir, exist_ok=True)
 
-    # 用精确到秒的时间戳作为文件名
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = os.path.join(log_dir, f"log_{timestamp}.md")
 
-    # 组装人类易读的 Markdown 日志内容
     content = f"# 自动化分析日志 - {timestamp}\n"
     content += f"**勾选的分析类型**: {', '.join(analysis_types)}\n\n"
-    content += f"## 1. 运行时的网表 (Netlist)\n```text\n{netlist}\n```\n\n"
-    content += f"## 2. 提取的拉普拉斯公式\n{laplace_md if laplace_md else '*未执行或未成功提取*'}\n\n"
-    content += f"## 3. 提取的矩阵方程\n{matrix_md if matrix_md else '*未执行或未成功提取*'}\n\n"
-    content += f"## 4. 大模型深度分析报告\n{llm_result}\n"
+    content += f"## 1. 运行时的网表 (包含参数注入)\n```text\n{netlist}\n```\n\n"
+    content += f"## 2. 提取的拉普拉斯公式\n{laplace_md if laplace_md else '*未执行或提取失败*'}\n\n"
+    content += f"## 3. 提取的矩阵方程\n{matrix_md if matrix_md else '*未执行或提取失败*'}\n\n"
+    content += f"## 4. 波特图状态\n"
+    content += f"- 幅度图: {'✅ 成功生成' if bode_mag_path else '❌ 未生成'}\n"
+    content += f"- 相位图: {'✅ 成功生成' if bode_phs_path else '❌ 未生成'}\n\n"
+    content += f"## 5. 大模型深度分析报告\n{llm_result}\n"
 
     try:
         with open(log_file, "w", encoding="utf-8") as f:
             f.write(content)
-        print(f"[后端日志] 运行记录已保存至: {log_file}")
+        print(f"[后台日志] 本次分析已保存至: {log_file}")
     except Exception as e:
-        print(f"[后端日志] 保存失败: {e}")
+        print(f"[后台日志] 保存出错: {e}")
 
 
-def run_my_analysis(ui_netlist_text, analysis_types):
+def find_pdf_path(filename):
+    """寻找 SLiCAP 生成的 PDF 文件"""
+    if os.path.exists(f"./img/{filename}"): return f"./img/{filename}"
+    if os.path.exists(f"./html/img/{filename}"): return f"./html/img/{filename}"
+    return None
+
+
+def run_my_analysis(ui_netlist_text, param_df_data, analysis_types, start_f, stop_f, points):
     if not ui_netlist_text or not analysis_types:
-        return (gr.update(visible=False), gr.update(visible=False), "⚠️ 分析失败：未提供网表或未勾选分析项！", None)
+        return (gr.update(visible=False), gr.update(visible=False),
+                gr.update(visible=False), gr.update(visible=False),
+                "⚠️ 分析失败：未提供网表或未勾选分析项！", None)
 
-    # 1. 写入最新的网表
+    # 1. 组装最终仿真网表
+    final_netlist_lines = ui_netlist_text.strip().split('\n')
+    if param_df_data:
+        param_str = ".param " + " ".join([f"{row[0]}={row[1]}" for row in param_df_data if row[0]])
+        if final_netlist_lines[-1].strip().lower() == '.end':
+            final_netlist_lines.insert(-1, param_str)
+        else:
+            final_netlist_lines.append(param_str)
+            final_netlist_lines.append('.end')
+
+    final_netlist = "\n".join(final_netlist_lines)
+
     os.makedirs("./cir", exist_ok=True)
     with open("./cir/circuit.cir", "w", encoding="utf-8") as f:
-        f.write(ui_netlist_text)
+        f.write(final_netlist)
 
     md_laplace, md_matrix, llm_context = "", "", ""
+    svg_mag, svg_phs = "", ""
+    path_mag, path_phs = None, None
     os.makedirs("./html", exist_ok=True)
+    os.makedirs("./img", exist_ok=True)
 
-    is_laplace_selected = "拉普拉斯分析" in analysis_types
-    is_matrix_selected = "矩阵方程分析" in analysis_types
+    is_laplace = "拉普拉斯分析" in analysis_types
+    is_matrix = "矩阵方程分析" in analysis_types
+    is_bode = "波特图绘制" in analysis_types
 
-    # 2. 【修复时序问题】：先清理旧的 Laplace 文件，再执行脚本
-    if is_laplace_selected:
+    # --- 执行拉普拉斯 ---
+    if is_laplace:
         clean_old_html("./html", "Laplace-Transfer.html")
-
-        # 捕获报错信息，不再静默失败
-        result = subprocess.run(
-            [sys.executable, "run_laplace.py"],
-            capture_output=True, text=True, encoding="utf-8", errors="ignore"
-        )
-        if result.returncode != 0:
-            print(f"❌ [拉普拉斯脚本崩溃] 详细报错如下：\n{result.stderr}")
+        res = subprocess.run([sys.executable, "run_laplace.py"], capture_output=True, text=True, encoding="utf-8")
+        if res.returncode != 0: print(f"❌ [拉普拉斯报错]: {res.stderr}")
 
         latest_lap = get_latest_html("./html", "Laplace-Transfer.html")
         if latest_lap:
-            raw_laplace = read_file_content(latest_lap)
-            md_laplace = parse_slicap_to_markdown(raw_laplace)
-            llm_context += f"--- 传递函数 (来源: {os.path.basename(latest_lap)}) ---\n{md_laplace}\n\n"
-        else:
-            md_laplace = "*⚠️ 分析出错：系统未生成新的 Laplace HTML 文件，请检查网表语法是否有误。*"
+            md_laplace = parse_slicap_to_markdown(read_file_content(latest_lap))
+            llm_context += f"--- 传递函数 ---\n{md_laplace}\n\n"
 
-    # 3. 【修复时序问题】：先清理旧的 Matrix 文件，再执行脚本
-    if is_matrix_selected:
+    # --- 执行矩阵 ---
+    if is_matrix:
         clean_old_html("./html", "Matrix-Equations.html")
-
-        result = subprocess.run(
-            [sys.executable, "run_matrix.py"],
-            capture_output=True, text=True, encoding="utf-8", errors="ignore"
-        )
-        if result.returncode != 0:
-            print(f"❌ [矩阵脚本崩溃] 详细报错如下：\n{result.stderr}")
+        res = subprocess.run([sys.executable, "run_matrix.py"], capture_output=True, text=True, encoding="utf-8")
+        if res.returncode != 0: print(f"❌ [矩阵报错]: {res.stderr}")
 
         latest_mat = get_latest_html("./html", "Matrix-Equations.html")
         if latest_mat:
-            raw_matrix = read_file_content(latest_mat)
-            md_matrix = parse_slicap_to_markdown(raw_matrix)
-            llm_context += f"--- 矩阵方程 (来源: {os.path.basename(latest_mat)}) ---\n{md_matrix}\n\n"
+            md_matrix = parse_slicap_to_markdown(read_file_content(latest_mat))
+            llm_context += f"--- 矩阵方程 ---\n{md_matrix}\n\n"
+
+    # --- 执行波特图 ---
+    if is_bode:
+        # 清除旧文件（防干扰）
+        for p in ["./img/f_dBm.pdf", "./img/f_dBm.png", "./img/f_phs.pdf", "./img/f_phs.png"]:
+            if os.path.exists(p): os.remove(p)
+
+        res = subprocess.run([sys.executable, "run_bode.py", str(start_f), str(stop_f), str(points)],
+                             capture_output=True, text=True, encoding="utf-8", errors="ignore")
+        if res.returncode != 0:
+            print(f"❌ [波特图报错]: {res.stderr}")
+            png_mag, png_phs = None, None
         else:
-            md_matrix = "*⚠️ 分析出错：系统未生成新的 Matrix HTML 文件，请检查网表语法是否有误。*"
+            # 1. 寻找生成的 PDF
+            pdf_mag = find_pdf_path("f_dBm.pdf")
+            pdf_phs = find_pdf_path("f_phs.pdf")
+            # 2. 转换为 PNG
+            png_mag = convert_pdf_to_png(pdf_mag)
+            png_phs = convert_pdf_to_png(pdf_phs)
+    else:
+        png_mag, png_phs = None, None
 
-    # 4. 动态构建给大模型的 Prompt
-    expected_sections = ["### 一、 电路拓扑与基础分析\n（必须使用 Markdown 表格归纳）"]
-    section_index = 2
-
-    if is_laplace_selected:
-        expected_sections.append(
-            f"### {['一', '二', '三', '四', '五'][section_index - 1]}、 拉普拉斯传递函数 (Laplace Transfer)\n（请先使用块级公式 `$$...$$` 渲染传入的传递函数，再结合网表参数详细分析其增益特性、零极点分布等）")
-        section_index += 1
-
-    if is_matrix_selected:
-        expected_sections.append(
-            f"### {['一', '二', '三', '四', '五'][section_index - 1]}、 节点电压矩阵方程 (Matrix Equations)\n（请先使用块级公式 `$$...$$` 渲染传入的矩阵方程，再解释矩阵维度及对应元素的物理联系）")
-        section_index += 1
-
-    expected_sections.append(
-        f"### {['一', '二', '三', '四', '五'][section_index - 1]}、 综合性能评估\n（一到两句话总结整体性能或潜在应用场景）")
-
-    dynamic_prompt_sections = "\n\n".join(expected_sections)
-
-    # 5. 调用大模型
+    # --- 调用大模型 ---
     llm_analysis_result = ""
     if llm_context.strip():
+        expected_sections = ["### 一、 电路拓扑与基础分析\n（必须使用 Markdown 表格归纳）"]
+        section_index = 2
+        if is_laplace:
+            expected_sections.append(f"### {['一', '二', '三', '四', '五'][section_index - 1]}、 拉普拉斯传递函数")
+            section_index += 1
+        if is_matrix:
+            expected_sections.append(f"### {['一', '二', '三', '四', '五'][section_index - 1]}、 节点电压矩阵方程")
+            section_index += 1
+        expected_sections.append(f"### {['一', '二', '三', '四', '五'][section_index - 1]}、 综合性能评估")
+
         messages = [
-            {'role': 'system', 'content': (
-                "你是一位顶级的电子电路分析专家。我将为你提供电路网表及提取的公式。\n"
-                "请你**务必严格按照以下模块的顺序和格式**进行输出：\n\n"
-                f"{dynamic_prompt_sections}\n\n"
-                "⚠️ 【极度重要的排版规范】：\n"
-                "为了防止 Markdown 解析引擎冲突，正文中的**所有行内变量、带下标的符号**（例如跨导 \\(g_m\\)、电阻 \\(R_l\\)、基极电阻 \\(r_\\pi\\) 等），**绝对禁止使用单美元符号 `$ ... $` 包裹**，请**务必全部使用 `\\( ... \\)` 来包裹**！\n"
-                "（正确示例：通过调节 \\(g_m\\) 和 \\(R_l\\) 的阻值...；错误示例：通过调节 $g_m$ 和 $R_l$ 的阻值...）"
-            )},
-            {'role': 'user', 'content': f"【提取的公式内容】：\n{llm_context}\n\n【原电路网表内容】：\n{ui_netlist_text}"}
+            {'role': 'system',
+             'content': f"你是一位电路分析专家。请严格按顺序输出：\n\n{chr(10).join(expected_sections)}\n\n⚠️ 所有行内变量必须用 \\( ... \\) 包裹！"},
+            {'role': 'user', 'content': f"公式：\n{llm_context}\n最终网表：\n{final_netlist}"}
         ]
         try:
-            response = Generation.call(
-                api_key=os.environ.get("DASHSCOPE_API_KEY"),
-                model="deepseek-v4-flash", messages=messages, result_format="message"
-            )
-            if response.status_code == 200:
-                llm_analysis_result = response.output.choices[0].message.content
-            else:
-                llm_analysis_result = f"大模型调用失败：{response.message}"
+            response = Generation.call(api_key=os.environ.get("DASHSCOPE_API_KEY"), model="deepseek-v4-flash",
+                                       messages=messages, result_format="message")
+            llm_analysis_result = response.output.choices[0].message.content if response.status_code == 200 else "调用失败"
         except Exception as e:
-            llm_analysis_result = f"大模型异常：{str(e)}"
+            llm_analysis_result = f"异常：{str(e)}"
     else:
-        llm_analysis_result = "⚠️ 提取有效公式失败，大模型终止分析。"
+        llm_analysis_result = "未勾选公式类分析或提取失败，跳过大模型文字分析。"
 
-    # 【核心新增】：在最后将本次运行的全部数据静默保存到后台
-    save_backend_log(ui_netlist_text, md_laplace, md_matrix, llm_analysis_result, analysis_types)
+    # --- 核心：保存后台日志 ---
+    save_backend_log(final_netlist, md_laplace, md_matrix, png_mag, png_phs, llm_analysis_result, analysis_types)
 
-    # 生成占位图表
-    fig = plt.figure(figsize=(8, 4))
-    plt.text(0.5, 0.5, f"运行完毕：{', '.join(analysis_types)}", ha="center", fontsize=12)
-    plt.axis("off")
+    fig = plt.figure(figsize=(1, 1));
+    plt.axis("off");
     plt.close(fig)
 
+    # 将生成的 PNG 路径返回给前端的 gr.Image
     return (
-        gr.update(value=md_laplace, visible=is_laplace_selected),
-        gr.update(value=md_matrix, visible=is_matrix_selected),
-        llm_analysis_result,
-        fig
+        gr.update(value=md_laplace, visible=is_laplace),
+        gr.update(value=md_matrix, visible=is_matrix),
+        gr.update(value=png_mag, visible=bool(png_mag)),
+        gr.update(value=png_phs, visible=bool(png_phs)),
+        llm_analysis_result, fig
     )

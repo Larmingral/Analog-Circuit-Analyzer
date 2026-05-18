@@ -1,6 +1,36 @@
 import os
 import glob
 import re
+import fitz  # 【新增】这是 PyMuPDF 的包名
+
+
+# ... (保留你之前的 read_file_content, clean_old_html, parse_slicap_to_markdown 等代码) ...
+
+def convert_pdf_to_png(pdf_path):
+    """【新增核心转换模块】：读取 PDF 并将其转换为高分辨率的 PNG 图片，返回图片路径"""
+    if not pdf_path or not os.path.exists(pdf_path):
+        return None
+    try:
+        # 生成同目录下的 .png 路径
+        png_path = pdf_path.rsplit('.', 1)[0] + '.png'
+
+        # 打开 PDF 文件
+        doc = fitz.open(pdf_path)
+        page = doc.load_page(0)  # 波特图只有一页
+
+        # 放大渲染分辨率（缩放系数 zoom=3 大约相当于 200+ DPI，非常清晰）
+        zoom = 3.0
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+
+        # 保存为 PNG
+        pix.save(png_path)
+        doc.close()
+
+        return png_path
+    except Exception as e:
+        print(f"PDF 转 PNG 失败: {e}")
+        return None
 
 def read_file_content(filepath):
     """读取文件原始文本内容"""
@@ -57,3 +87,18 @@ def parse_slicap_to_markdown(html_content):
 
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
+
+# ...保留你之前的代码，在末尾追加以下函数...
+
+def get_svg_content(filepath):
+    """读取 SVG 文件内容并直接作为 HTML 渲染"""
+    if not os.path.exists(filepath):
+        return None
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            svg_data = f.read()
+            # 剥离多余的 xml 声明，防止在网页中冲突
+            svg_data = re.sub(r'<\?xml.*?\?>', '', svg_data, flags=re.IGNORECASE)
+            return f"<div style='text-align: center;'>{svg_data}</div>"
+    except Exception as e:
+        return f"<p style='color:red;'>读取图像失败: {str(e)}</p>"
