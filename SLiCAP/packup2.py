@@ -83,7 +83,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="智能电路分析系统") as demo
             {"left": "$$", "right": "$$", "display": True},
             {"left": r"\(", "right": r"\)", "display": False},
             {"left": "$", "right": "$", "display": False},
-            {"left": "[", "right": "]", "display": False}
+            {"left": "\\[", "right": "\\]", "display": False}
         ]
     )
     res_fig = gr.Plot(visible=False)
