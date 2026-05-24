@@ -5,8 +5,8 @@ from analysis import run_my_analysis
 DEFAULT_NETLIST = """Vdd Vdd 0 V dc={Vdd} value=0
 Vin in 0 V value={Vin} 
 
-Rd Vdd out R value={Rd}
-Rs net1 0 R value={Rs}
+Rd Vdd out R value={Rd} noisetemp={T}
+Rs net1 0 R value={Rs} noisetemp={T}
 
 M1 out in net1 0 M gm={gm1} cgs={cgs1} cdg={cdg1}
 
@@ -50,7 +50,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="智能电路分析系统") as demo
     gr.Markdown("### 🚀 第三步：选择分析类型并执行")
     with gr.Row():
         analysis_selector = gr.CheckboxGroup(
-            choices=["拉普拉斯分析", "矩阵方程分析", "波特图绘制"],
+            choices=["拉普拉斯分析", "矩阵方程分析", "噪声分析", "波特图绘制"],
             value=["拉普拉斯分析", "波特图绘制"],
             label="请勾选需要运行的独立模块", interactive=True
         )
@@ -68,8 +68,24 @@ with gr.Blocks(theme=gr.themes.Soft(), title="智能电路分析系统") as demo
     # ... 前半部分代码不变 ...
 
     gr.Markdown("### 📊 第四步：分析结果")
-    out_laplace = gr.Markdown(visible=False, label="拉普拉斯传递函数")
-    out_matrix = gr.Markdown(visible=False, label="矩阵方程")
+    out_laplace = gr.Markdown(visible=False, label="拉普拉斯传递函数", latex_delimiters=[
+        {"left": "$$", "right": "$$", "display": True},
+        {"left": "$", "right": "$", "display": False},
+        {"left": r"\(", "right": r"\)", "display": False},
+        {"left": "\\[", "right": "\\]", "display": False}
+    ])
+    out_matrix = gr.Markdown(visible=False, label="矩阵方程", latex_delimiters=[
+        {"left": "$$", "right": "$$", "display": True},
+        {"left": "$", "right": "$", "display": False},
+        {"left": r"\(", "right": r"\)", "display": False},
+        {"left": "\\[", "right": "\\]", "display": False}
+    ])
+    out_noise = gr.Markdown(visible=False, label="噪声分析", latex_delimiters=[
+        {"left": "$$", "right": "$$", "display": True},
+        {"left": "$", "right": "$", "display": False},
+        {"left": r"\(", "right": r"\)", "display": False},
+        {"left": "\\[", "right": "\\]", "display": False}
+    ])
 
     # 采用原生的 gr.Image 接收 PNG，既不会卡死浏览器，右上角又自带全屏放大与下载按钮
     with gr.Row():
@@ -97,7 +113,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="智能电路分析系统") as demo
     btn_analyze.click(
         fn=run_my_analysis,
         inputs=[circuit_text, param_df, analysis_selector, sweep_start, sweep_stop, sweep_points],
-        outputs=[out_laplace, out_matrix, out_bode_mag, out_bode_phs, res_markdown, res_fig]
+        outputs=[out_laplace, out_matrix, out_noise, out_bode_mag, out_bode_phs, res_markdown, res_fig]
     )
 
 if __name__ == "__main__":
