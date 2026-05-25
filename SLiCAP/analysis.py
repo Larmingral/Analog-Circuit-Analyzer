@@ -154,9 +154,18 @@ def run_my_analysis(ui_netlist_text, param_df_data, analysis_types, start_f, sto
             {'role': 'user', 'content': f"公式：\n{llm_context}\n最终网表：\n{final_netlist}"}
         ]
         try:
-            response = Generation.call(api_key=os.environ.get("DASHSCOPE_API_KEY"), model="deepseek-v4-flash",
+            response = Generation.call(api_key=os.environ.get("DASHSCOPE_API_KEY"), model="glm-5.1",
                                        messages=messages, result_format="message")
-            llm_analysis_result = response.output.choices[0].message.content if response.status_code == 200 else "调用失败"
+            if response.status_code == 200: llm_analysis_result = response.output.choices[0].message.content
+
+            else:
+                print(f"请求失败，状态码: {response.status_code}")
+                print(f"错误码: {response.code}")
+                print(f"错误信息: {response.message}")
+                print("详细错误说明请参考：https://help.aliyun.com/zh/model-studio/developer-reference/error-code")
+
+
+
         except Exception as e:
             llm_analysis_result = f"异常：{str(e)}"
     else:
