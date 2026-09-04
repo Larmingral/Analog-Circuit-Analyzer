@@ -11,6 +11,10 @@ Web Schematic ───────────┤                    -> SFG 分
 官方 .slicap_sch ────────┘
 ```
 
+Web Schematic 使用浏览器原生 React 画布，但器件 SVG、引脚顺序、模型参数、
+`.slicap_sch` 持久化格式和 `.cir` 导出均以 SLiCAP 5.2.1 为权威来源。
+PySide6 仅由后端的官方 headless exporter 使用，不向浏览器传输桌面窗口。
+
 ## 当前能力
 
 | 模块 | 当前状态 |
@@ -18,8 +22,9 @@ Web Schematic ───────────┤                    -> SFG 分
 | `.cir` 规范化与严格参数解析 | 已实现；支持 `k/m/u/n/p` 和科学计数法 |
 | SLiCAP 5.2.1 数值分析 | 已实现；使用 `makeCircuit/doLaplace/doPZ/doMatrix/doNoise` |
 | SFG 算法接入 | 已实现；安装独立 `sfg-prototype` wheel 后可调用 |
-| Web Schematic | 已实现首版；支持 R/C/L、独立源、四种受控源、MOS、QV BJT、端口和地 |
-| `.slicap_sch` 双向转换 | 核心器件已实现，并由官方 SLiCAP CLI 往返测试验证 |
+| Web Schematic | 使用官方 SVG 和引脚坐标；支持核心器件、变换、命名网络和 junction |
+| `.slicap_sch` 双向转换 | 作为规范 schematic 边界；未知字段只读透传 |
+| `.cir` 生成 | 默认调用 SLiCAP 5.2.1 官方 headless CLI，不由前端拼接 |
 | `X` 子电路块 | 可编辑端口并导出 `.cir`；原生 `.slicap_sch` 符号导出暂不支持 |
 | 旧 Gradio 页面 | 保留，并嵌入 Web Schematic；固定使用 Gradio 5.x |
 | 图片识别 | 本阶段只保留 `netLens IR -> CircuitDocument` 边界，不加载视觉权重 |
@@ -106,6 +111,8 @@ cd C:\pr\learning\college\else\sitp_2\github\Analog-Circuit-Analyzer-next
 | 方法 | 路径 | 作用 |
 |---|---|---|
 | `GET` | `/api/v1/catalog/devices` | 5.2.1 器件、引脚和默认参数目录 |
+| `GET` | `/api/v1/catalog/symbols/{name}.svg` | 单个官方 SLiCAP SVG 符号 |
+| `GET` | `/api/v1/catalog/symbols/core` | 官方核心 SVG symbol bundle |
 | `POST` | `/api/v1/circuits/normalize` | 规范化文本或 `.cir` 网表 |
 | `POST` | `/api/v1/schematics/convert` | 内部 JSON、`.slicap_sch`、`.cir` 转换 |
 | `POST` | `/api/v1/analyses` | 提交数值或 SFG 分析任务 |
@@ -121,7 +128,7 @@ cd C:\pr\learning\college\else\sitp_2\github\Analog-Circuit-Analyzer-next
 当前已验证：
 
 - SFG 算法在 SLiCAP 4.0.8 与 5.2.1 下均为 `52 passed`。
-- 本仓库后端为 `16 passed`。
+- 本仓库后端包含官方目录、CLI、junction、参数和分析链路回归测试。
 - React/TypeScript 生产构建通过。
 - 20 个显式数值测试在 SLiCAP 4.0.8 与 5.2.1 间全部通过：传递函数均符号
   等价，采样最大相对误差约 `5.39e-16`，极点和零点最大相对差为 0。
@@ -149,8 +156,10 @@ python .\scripts\run-circuit-regression.py `
 ## 已知边界
 
 - SLiCAP 5.2.1 GUI 仍在发展，本分支固定版本，不跟随 `latest`。
-- Web `X` 块可生成 SLiCAP 网表，但尚不能创建带自定义符号库的原生
-  `.slicap_sch` 元件。
+- Web `X` 块仍需要项目本地 symbol bundle；单文件原生 `.slicap_sch`
+  导出暂不支持自定义子电路图形。
+- 当前 junction 和导线折点可从官方文件导入并保留；浏览器首版通过 junction
+  元素和自动正交路由建立分支，尚未提供拖拽任意折点的专用工具。
 - SFG 算法对 `demo_2_numeric` 已能生成分频段解释；部分高阶局部闭环根仍可能
   返回较长表达式或 `outside_error_limit`，不能描述为已达到任意复杂电路的论文级
   最简形式。

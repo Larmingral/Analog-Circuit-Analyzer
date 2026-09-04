@@ -7,7 +7,7 @@
 
 ```text
 Input adapters
-  -> SchematicDocument / raw netlist
+  -> official-compatible .slicap_sch / raw netlist
   -> CircuitDocument
   -> SLiCAP521Adapter
        -> public SLiCAP numeric analyses
@@ -30,6 +30,11 @@ SLiCAP 当前具有解析器和项目配置的全局状态。`SLiCAP521Adapter` 
 
 ## Schematic 边界
 
-内部 JSON 描述器件、引脚、线、节点名、参数和分析端口；SLiCAP 5.2.1 原生 JSON
-适配器负责坐标和官方符号引脚。未知官方字段按只读 passthrough 保留，避免往返保存
-时无声丢失未来版本数据。
+官方 `.slicap_sch` 是 schematic 的规范持久化格式。React 画布使用
+`SchematicDocument` 作为临时视图模型，但导出和分析前必须转换为官方 JSON。
+器件 SVG、引脚坐标、参数和引用来自 SLiCAP `SymbolLibrary`，`.cir` 由
+`python -m SLiCAP.schematic.cli netlist` 生成。未知官方字段按只读 passthrough
+保留，避免往返保存时无声丢失未来版本数据。
+
+PySide6 只存在于服务端：官方 CLI 在 offscreen `QApplication` 中加载 scene 并
+执行连通性与网表生成。浏览器不会运行或远程显示 Qt 桌面窗口。
