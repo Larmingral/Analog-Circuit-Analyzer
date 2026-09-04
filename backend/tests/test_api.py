@@ -15,6 +15,19 @@ def test_health_catalog_and_conversion(tmp_path, rc_schematic) -> None:
 
         catalog = client.get("/api/v1/catalog/devices").json()["devices"]
         assert {"R", "C", "L", "V", "I", "G", "E", "F", "H", "M", "QV"}.issubset(catalog)
+        assert catalog["G"]["symbol"] == "VCCS"
+        assert catalog["G"]["pins"] == ["outp", "outn", "inp", "inn"]
+        assert catalog["G"]["pin_positions"]["inp"] == {"x": -20.0, "y": -20.0}
+
+        symbol = client.get("/api/v1/catalog/symbols/VCCS.svg")
+        assert symbol.status_code == 200
+        assert symbol.headers["content-type"].startswith("image/svg+xml")
+        assert b"<svg" in symbol.content
+
+        bundle = client.get("/api/v1/catalog/symbols/core")
+        assert bundle.status_code == 200
+        assert b"<defs>" in bundle.content
+        assert b'<g id="R"' in bundle.content
 
         response = client.post(
             "/api/v1/schematics/convert",
@@ -22,6 +35,24 @@ def test_health_catalog_and_conversion(tmp_path, rc_schematic) -> None:
         )
         assert response.status_code == 200
         assert "R1 in out R value={R}" in response.json()["netlist_text"]
+
+
+def test_official_exporter_reports_unresolved_component_value(tmp_path, rc_schematic) -> None:
+    broken = rc_schematic.model_copy(deep=True)
+    resistor = next(component for component in broken.components if component.refdes == "R1")
+    resistor.parameters["value"] = "?"
+    with TestClient(create_app(tmp_path / "runs")) as client:
+        response = client.post(
+            "/api/v1/schematics/convert",
+            json={"schematic": broken.model_dump(mode="json"), "output_format": "cir"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["netlist_text"] is None
+        assert any(
+            item["code"] == "official_missing_value"
+            for item in payload["diagnostics"]
+        )
 
 
 def test_numeric_analysis_job_completes_through_http_api(tmp_path, rc_schematic) -> None:

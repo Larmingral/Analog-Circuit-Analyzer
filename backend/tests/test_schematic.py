@@ -6,9 +6,18 @@ import sys
 
 from SLiCAP.schematic.schematic_data import SchematicData
 
+from isaca_api.catalog import device_catalog
+from isaca_api.official_schematic import official_netlist_from_schematic
 from isaca_api.schematic import schematic_to_netlist
 from isaca_api.slicap_schematic import internal_to_slicap_schematic, slicap_schematic_to_internal
-from isaca_api.models import AnalysisPorts, Point, SchematicComponent, SchematicDocument
+from isaca_api.models import (
+    AnalysisPorts,
+    PinRef,
+    Point,
+    SchematicComponent,
+    SchematicDocument,
+    SchematicWire,
+)
 
 
 def test_internal_schematic_exports_expected_rc_netlist(rc_schematic) -> None:
@@ -56,6 +65,19 @@ def test_unknown_native_objects_are_preserved_read_only(rc_schematic) -> None:
     assert any(item.code == "slicap_symbol_read_only" for item in diagnostics)
 
 
+def test_native_junctions_and_wire_waypoints_survive_round_trip(rc_schematic) -> None:
+    native, _ = internal_to_slicap_schematic(rc_schematic)
+    native["junctions"] = [{"x": 250.0, "y": 300.0}]
+    restored, diagnostics = slicap_schematic_to_internal(native)
+    assert [item for item in diagnostics if item.level == "error"] == []
+    assert any(component.device == "JUNCTION" for component in restored.components)
+    assert any(wire.waypoints for wire in restored.wires)
+
+    exported, export_diagnostics = internal_to_slicap_schematic(restored)
+    assert [item for item in export_diagnostics if item.level == "error"] == []
+    assert {"x": 250.0, "y": 300.0} in exported["junctions"]
+
+
 def test_native_file_is_netlisted_by_official_slicap_cli(tmp_path, rc_schematic) -> None:
     native, diagnostics = internal_to_slicap_schematic(rc_schematic)
     assert [item for item in diagnostics if item.level == "error"] == []
@@ -84,6 +106,90 @@ def test_native_file_is_netlisted_by_official_slicap_cli(tmp_path, rc_schematic)
     assert "C1 out 0 C value={C}" in netlist
     assert ".source V1" in netlist
     assert ".detector V_out" in netlist
+
+
+def test_official_core_devices_export_through_slicap_cli(tmp_path) -> None:
+    """Exercise official pins, models, parameters and current-control refs."""
+
+    catalog = device_catalog()
+    specifications = [
+        ("vctrl", "VCTRL", "V", {"value": "1"}, None),
+        ("l1", "L1", "L", {"value": "1m"}, None),
+        ("g1", "G1", "G", {"value": "gain"}, None),
+        ("e1", "E1", "E", {"value": "gain"}, None),
+        ("f1", "F1", "F", {"value": "gain"}, "VCTRL"),
+        ("h1", "H1", "H", {"value": "gain"}, "VCTRL"),
+        ("m1", "M1", "M", {"gm": "gm", "go": "go"}, None),
+        ("q1", "Q1", "QV", {"gm": "gm", "go": "go"}, None),
+    ]
+    components: list[SchematicComponent] = []
+    wires: list[SchematicWire] = []
+    net_index = 1
+
+    for row, (component_id, refdes, device, parameters, control_ref) in enumerate(specifications):
+        origin = Point(x=200.0, y=100.0 + row * 140.0)
+        components.append(
+            SchematicComponent(
+                id=component_id,
+                refdes=refdes,
+                device=device,
+                position=origin,
+                model=catalog[device]["model"],
+                parameters=parameters,
+                control_ref=control_ref,
+            )
+        )
+        for pin_id, coordinates in catalog[device]["pin_positions"].items():
+            port_id = f"port-{net_index}"
+            pin_x = origin.x + coordinates["x"]
+            pin_y = origin.y + coordinates["y"]
+            offset = -60.0 if coordinates["x"] <= 0 else 60.0
+            components.append(
+                SchematicComponent(
+                    id=port_id,
+                    refdes=f"P{net_index}",
+                    device="PORT",
+                    position=Point(x=pin_x + offset, y=pin_y),
+                    properties={"name": f"n{net_index}"},
+                )
+            )
+            wires.append(
+                SchematicWire(
+                    id=f"W{net_index}",
+                    source=PinRef(component_id=component_id, pin_id=pin_id),
+                    target=PinRef(component_id=port_id, pin_id="port"),
+                )
+            )
+            net_index += 1
+
+    document = SchematicDocument(
+        title="Official core devices",
+        components=components,
+        wires=wires,
+        parameters={"gain": "2", "gm": "1m", "go": "1u"},
+    )
+    native, conversion_diagnostics = internal_to_slicap_schematic(document)
+    assert [item for item in conversion_diagnostics if item.level == "error"] == []
+
+    netlist, export_diagnostics = official_netlist_from_schematic(native, tmp_path)
+    assert export_diagnostics == []
+    assert netlist is not None
+    lines = {line.split()[0]: line for line in netlist.splitlines() if line and not line.startswith(".")}
+    for refdes, model in {
+        "VCTRL": "V",
+        "L1": "L",
+        "G1": "G",
+        "E1": "E",
+        "F1": "F",
+        "H1": "H",
+        "M1": "M",
+        "Q1": "QV",
+    }.items():
+        assert f" {model} " in lines[refdes]
+    assert " VCTRL " in lines["F1"]
+    assert " VCTRL " in lines["H1"]
+    assert "gm={gm}" in lines["M1"]
+    assert "gm={gm}" in lines["Q1"]
 
 
 def test_subcircuit_block_exports_to_cir_and_reports_native_limit() -> None:

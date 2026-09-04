@@ -37,25 +37,6 @@ _SYMBOL_TO_DEVICE = {
     "port": "PORT",
 }
 
-# SLiCAP 5.2.1 system-symbol pin coordinates.  The table is version-pinned and
-# covered by a compatibility test against the installed Symbols*.svg files.
-_SYMBOL_PINS: dict[str, dict[str, tuple[float, float]]] = {
-    "R": {"pos": (0, -20), "neg": (0, 20)},
-    "R0": {"pos": (0, -20), "neg": (0, 20)},
-    "C": {"pos": (0, -20), "neg": (0, 20)},
-    "L": {"pos": (0, -20), "neg": (0, 20)},
-    "V": {"outp": (0, -20), "outn": (0, 20)},
-    "I": {"outp": (0, -20), "outn": (0, 20)},
-    "VCCS": {"outp": (10, -20), "outn": (10, 20), "inp": (-20, -20), "inn": (-20, 20)},
-    "VCVS": {"outp": (10, -20), "outn": (10, 20), "inp": (-20, -20), "inn": (-20, 20)},
-    "CCCS": {"outp": (0, -20), "outn": (0, 20)},
-    "CCVS": {"outp": (0, -20), "outn": (0, 20)},
-    "M": {"D": (10, -20), "G": (-10, 10), "S": (10, 20), "B": (10, 0)},
-    "QV": {"C": (10, -20), "B": (-10, 0), "E": (10, 20), "S": (20, 0)},
-    "0": {"0": (0, 0)},
-    "port": {"port": (0, 0)},
-}
-
 _KNOWN_TOP_LEVEL = {
     "components",
     "wires",
@@ -94,8 +75,18 @@ def _transform_pin(component: dict[str, Any], pin: tuple[float, float]) -> tuple
 
 
 def _component_pin_positions(component: dict[str, Any]) -> dict[str, tuple[float, float]]:
-    pins = _SYMBOL_PINS.get(component.get("symbol_name", ""), {})
-    return {name: _transform_pin(component, position) for name, position in pins.items()}
+    if component.get("symbol_name") == "__junction__":
+        return {"junction": _round_point((float(component["x"]), float(component["y"])))}
+    symbol_name = component.get("symbol_name", "")
+    definition = next(
+        (item for item in DEVICE_CATALOG.values() if item.get("symbol") == symbol_name),
+        None,
+    )
+    pins = definition.get("pin_positions", {}) if definition else {}
+    return {
+        name: _transform_pin(component, (float(position["x"]), float(position["y"])))
+        for name, position in pins.items()
+    }
 
 
 def _point_on_segment(
@@ -204,6 +195,19 @@ def slicap_schematic_to_internal(raw: dict[str, Any]) -> tuple[SchematicDocument
         for pin_name, position in _component_pin_positions(native).items():
             pin_at_position[position].append(PinRef(component_id=instance_id, pin_id=pin_name))
 
+    for index, native in enumerate(raw.get("junctions", []), start=1):
+        instance_id = f"junction-{index}"
+        component = SchematicComponent(
+            id=instance_id,
+            refdes=f"J{index}",
+            device="JUNCTION",
+            position=Point(x=float(native.get("x", 0)), y=float(native.get("y", 0))),
+        )
+        components.append(component)
+        internal_by_id[instance_id] = component
+        position = _round_point((component.position.x, component.position.y))
+        pin_at_position[position].append(PinRef(component_id=instance_id, pin_id="junction"))
+
     union_find = _CoordinateUnionFind()
     wire_records: list[tuple[list[tuple[float, float]], dict[str, Any]]] = []
     candidates = set(pin_at_position)
@@ -228,18 +232,35 @@ def slicap_schematic_to_internal(raw: dict[str, Any]) -> tuple[SchematicDocument
         if name:
             net_names[union_find.find(points[0])].add(str(name))
 
-    pins_by_root: dict[tuple[float, float], list[PinRef]] = defaultdict(list)
-    for position, pin_refs in pin_at_position.items():
-        root = union_find.find(position)
-        pins_by_root[root].extend(pin_refs)
-
     wires: list[SchematicWire] = []
-    wire_index = 1
-    for root, pin_refs in sorted(pins_by_root.items(), key=lambda item: str(item[1])):
-        unique = {(pin.component_id, pin.pin_id): pin for pin in pin_refs}
-        ordered = [unique[key] for key in sorted(unique)]
-        if len(ordered) < 2:
-            continue
+    implicit_junctions: dict[tuple[float, float], PinRef] = {}
+
+    def endpoint_ref(position: tuple[float, float]) -> PinRef:
+        references = pin_at_position.get(position, [])
+        if references:
+            return sorted(
+                references,
+                key=lambda item: (internal_by_id[item.component_id].device == "JUNCTION", item.component_id),
+            )[0]
+        if position in implicit_junctions:
+            return implicit_junctions[position]
+        sequence = len([item for item in components if item.device == "JUNCTION"]) + 1
+        instance_id = f"junction-{sequence}"
+        component = SchematicComponent(
+            id=instance_id,
+            refdes=f"J{sequence}",
+            device="JUNCTION",
+            position=Point(x=position[0], y=position[1]),
+        )
+        components.append(component)
+        internal_by_id[instance_id] = component
+        reference = PinRef(component_id=instance_id, pin_id="junction")
+        implicit_junctions[position] = reference
+        pin_at_position[position].append(reference)
+        return reference
+
+    for wire_index, (points, native_wire) in enumerate(wire_records, start=1):
+        root = union_find.find(points[0])
         names = net_names.get(root, set())
         if len(names) > 1:
             diagnostics.append(
@@ -250,16 +271,15 @@ def slicap_schematic_to_internal(raw: dict[str, Any]) -> tuple[SchematicDocument
                 )
             )
         net_name = sorted(names)[0] if names else None
-        for target in ordered[1:]:
-            wires.append(
-                SchematicWire(
-                    id=f"W{wire_index}",
-                    source=ordered[0],
-                    target=target,
-                    net_name=net_name,
-                )
+        wires.append(
+            SchematicWire(
+                id=f"W{wire_index}",
+                source=endpoint_ref(points[0]),
+                target=endpoint_ref(points[-1]),
+                waypoints=[Point(x=point[0], y=point[1]) for point in points[1:-1]],
+                net_name=net_name,
             )
-            wire_index += 1
+        )
 
     parameter_values: dict[str, str] = {}
     for block in raw.get("parameters", []):
@@ -356,6 +376,13 @@ def internal_to_slicap_schematic(document: SchematicDocument) -> tuple[dict[str,
     native_by_internal_id: dict[str, dict[str, Any]] = {}
     for component in document.components:
         catalog = DEVICE_CATALOG.get(component.device, {})
+        if component.device == "JUNCTION":
+            native_by_internal_id[component.id] = {
+                "symbol_name": "__junction__",
+                "x": component.position.x,
+                "y": component.position.y,
+            }
+            continue
         if component.device == "X" or not catalog.get("symbol"):
             diagnostics.append(
                 Diagnostic(
@@ -418,6 +445,11 @@ def internal_to_slicap_schematic(document: SchematicDocument) -> tuple[dict[str,
     for key in _KNOWN_TOP_LEVEL - {"components", "wires", "parameters", "analysis_items", "properties"}:
         native[key] = deepcopy(read_only.get(key, [] if key != "border" else None))
     native["components"] = native_components + deepcopy(passthrough.get("slicap_unknown_components", []))
+    native["junctions"] = [
+        {"x": component.position.x, "y": component.position.y}
+        for component in document.components
+        if component.device == "JUNCTION"
+    ]
     native["wires"] = wires
     native["parameters"] = []
     if document.parameters:
@@ -464,6 +496,13 @@ def internal_to_slicap_schematic(document: SchematicDocument) -> tuple[dict[str,
 
 
 def pinned_symbol_pins() -> dict[str, dict[str, tuple[float, float]]]:
-    """Return the SLiCAP 5.2.1 pin table for compatibility tests."""
+    """Return official pin positions for compatibility tests."""
 
-    return deepcopy(_SYMBOL_PINS)
+    return {
+        item["symbol"]: {
+            name: (float(position["x"]), float(position["y"]))
+            for name, position in item["pin_positions"].items()
+        }
+        for item in DEVICE_CATALOG.values()
+        if item.get("symbol")
+    }

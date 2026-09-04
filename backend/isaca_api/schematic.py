@@ -104,7 +104,7 @@ def resolve_nets(document: SchematicDocument) -> tuple[dict[str, str], list[Diag
 
     for key in sorted(pin_keys - connected):
         component_id, _ = key.split(":", 1)
-        if components[component_id].device not in {"GROUND", "PORT"}:
+        if components[component_id].device not in {"GROUND", "PORT", "JUNCTION"}:
             diagnostics.append(Diagnostic(level=DiagnosticLevel.ERROR, code="dangling_pin", message="Component pin is not connected.", location=key))
     return resolved, diagnostics
 
@@ -129,7 +129,7 @@ def schematic_to_netlist(document: SchematicDocument) -> tuple[str, list[Diagnos
     refdes_seen: set[str] = set()
     lines = [f'"{document.title}"' if " " in document.title else document.title, ""]
     for component in document.components:
-        if component.device in {"GROUND", "PORT"}:
+        if component.device in {"GROUND", "PORT", "JUNCTION"}:
             continue
         if component.refdes in refdes_seen:
             diagnostics.append(Diagnostic(level=DiagnosticLevel.ERROR, code="duplicate_refdes", message=f"Duplicate reference designator {component.refdes}.", location=component.id))
