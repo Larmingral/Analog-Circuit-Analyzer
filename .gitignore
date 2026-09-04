@@ -6,3 +6,15 @@ SLiCAP/backend_logs/
 /SLiCAP/__pycache__
 SLiCAP/analysis_bkup.py
 .vscode/settings.json
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+web-schematic/dist/
+runs/
+artifacts/
+*.egg-info/
+test-runs/
+/test-api-runs/
+/SLiCAP.ini

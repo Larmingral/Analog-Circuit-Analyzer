@@ -1,0 +1,9 @@
+name: slicap5_env
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - -e .[test,ui]
+      - graphviz>=0.20
