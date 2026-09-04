@@ -11,11 +11,29 @@ import {
   type Connection,
   type Edge,
 } from '@xyflow/react'
-import { convertSchematic, fetchCatalog, getAnalysis, importSlicapSchematic, submitAnalysis } from './api'
+import { convertNativeSchematic, convertSchematic, fetchCatalog, getAnalysis, importSlicapSchematic, submitAnalysis } from './api'
 import { CircuitNode, type CircuitFlowNode } from './CircuitNode'
-import type { AnalysisJob, DeviceDefinition, Diagnostic, SchematicComponent, SchematicDocument } from './types'
+import { WireEdge } from './WireEdge'
+import type { AnalysisJob, DeviceDefinition, Diagnostic, SchematicComponent, SchematicDocument, SlicapSchematicDocument } from './types'
 
 const nodeTypes = { circuit: CircuitNode }
+const edgeTypes = { wire: WireEdge }
+
+const nodeHalfSize = (device: string) => {
+  if (device === 'JUNCTION') return 17
+  if (device === 'GROUND' || device === 'PORT') return 37
+  return 53
+}
+
+const toFlowPosition = (component: SchematicComponent) => ({
+  x: component.position.x - nodeHalfSize(component.device),
+  y: component.position.y - nodeHalfSize(component.device),
+})
+
+const toSchematicPosition = (node: CircuitFlowNode) => ({
+  x: node.position.x + nodeHalfSize(node.data.component.device),
+  y: node.position.y + nodeHalfSize(node.data.component.device),
+})
 
 const emptyDocument = (): SchematicDocument => ({
   schema_version: '1.0',
@@ -67,6 +85,7 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [document, setDocument] = useState<SchematicDocument>(emptyDocument)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
   const [netlist, setNetlist] = useState('')
   const [job, setJob] = useState<AnalysisJob | null>(null)
@@ -89,15 +108,33 @@ export default function App() {
   }, [job])
 
   const selected = nodes.find((node) => node.id === selectedId)
+  const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId)
+  const sourceCandidates = nodes
+    .filter((node) => ['V', 'I'].includes(node.data.component.device))
+    .map((node) => node.data.component.refdes)
+  const namedNets = new Set<string>()
+  for (const node of nodes) {
+    if (node.data.component.device === 'PORT') {
+      const name = String(node.data.component.properties.name ?? '').trim()
+      if (name) namedNets.add(name)
+    }
+  }
+  for (const edge of edges) {
+    if (typeof edge.label === 'string' && edge.label) namedNets.add(edge.label)
+  }
+  const detectorCandidates = [...namedNets].sort().map((name) => `V_${name}`)
+  const lgrefCandidates = nodes
+    .filter((node) => ['E', 'F', 'G', 'H'].includes(node.data.component.device))
+    .map((node) => node.data.component.refdes)
 
   const buildDocument = (): SchematicDocument => ({
     ...document,
-    components: nodes.map((node) => ({ ...node.data.component, position: node.position })),
+    components: nodes.map((node) => ({ ...node.data.component, position: toSchematicPosition(node) })),
     wires: edges.map((edge, index) => ({
       id: edge.id || `W${index + 1}`,
       source: { component_id: edge.source, pin_id: edge.sourceHandle ?? '?' },
       target: { component_id: edge.target, pin_id: edge.targetHandle ?? '?' },
-      waypoints: [],
+      waypoints: Array.isArray(edge.data?.waypoints) ? edge.data.waypoints : [],
       net_name: typeof edge.label === 'string' && edge.label ? edge.label : null,
     })),
   })
@@ -133,7 +170,7 @@ export default function App() {
     setNodes((current) => [...current, {
       id,
       type: 'circuit',
-      position: component.position,
+      position: toFlowPosition(component),
       data: { component, definition: definitionFor(component, catalog) },
     }])
     setSelectedId(id)
@@ -144,7 +181,8 @@ export default function App() {
     setEdges((current) => addEdge({
       ...connection,
       id: `W-${crypto.randomUUID()}`,
-      type: 'smoothstep',
+      type: 'wire',
+      data: { waypoints: [] },
     }, current))
   }
 
@@ -157,11 +195,62 @@ export default function App() {
     }))
   }
 
+  const transformSelected = (key: 'h_flip' | 'v_flip') => {
+    if (!selected) return
+    updateSelected({
+      passthrough: {
+        ...selected.data.component.passthrough,
+        [key]: !selected.data.component.passthrough[key],
+      },
+    })
+  }
+
+  const duplicateSelected = () => {
+    if (!selected) return
+    const original = selected.data.component
+    const definition = selected.data.definition
+    const prefix = definition.prefix ?? original.device.slice(0, 1)
+    const usedRefdes = new Set(nodes.map((node) => node.data.component.refdes))
+    let sequence = 1
+    while (usedRefdes.has(`${prefix}${sequence}`)) sequence += 1
+    const id = `${prefix}${sequence}-${crypto.randomUUID().slice(0, 6)}`
+    const component: SchematicComponent = {
+      ...original,
+      id,
+      refdes: `${prefix}${sequence}`,
+      position: {
+        x: toSchematicPosition(selected).x + 40,
+        y: toSchematicPosition(selected).y + 40,
+      },
+      parameters: { ...original.parameters },
+      properties: { ...original.properties },
+      passthrough: { ...original.passthrough },
+    }
+    setNodes((current) => [...current, {
+      id,
+      type: 'circuit',
+      position: toFlowPosition(component),
+      data: { component, definition: definitionFor(component, catalog) },
+    }])
+    setSelectedId(id)
+  }
+
+  const canonicalNative = async () => {
+    const converted = await convertSchematic(buildDocument(), 'slicap_sch')
+    setDiagnostics(converted.diagnostics)
+    if (converted.diagnostics.some((item) => item.level === 'error') || !converted.slicap_schematic) {
+      throw new Error('无法生成有效的 SLiCAP schematic，请先修复诊断错误。')
+    }
+    return converted.slicap_schematic
+  }
+
   const exportFormat = async (format: 'cir' | 'internal_json' | 'slicap_sch') => {
     setBusy(true)
     try {
       const current = buildDocument()
-      const response = await convertSchematic(current, format)
+      const response = format === 'cir'
+        ? await convertNativeSchematic(await canonicalNative(), 'cir')
+        : await convertSchematic(current, format)
       setDiagnostics(response.diagnostics)
       if (format === 'cir' && response.netlist_text) {
         setNetlist(response.netlist_text)
@@ -182,7 +271,7 @@ export default function App() {
   const runAnalysis = async () => {
     setBusy(true)
     try {
-      const response = await convertSchematic(buildDocument(), 'cir')
+      const response = await convertNativeSchematic(await canonicalNative(), 'cir')
       setDiagnostics(response.diagnostics)
       setNetlist(response.netlist_text ?? '')
       if (response.diagnostics.some((item) => item.level === 'error')) throw new Error('请先修复电路连接错误。')
@@ -199,13 +288,13 @@ export default function App() {
   const importNative = async (file: File) => {
     try {
       if (Object.keys(catalog).length === 0) throw new Error('器件目录尚未加载完成')
-      const raw = JSON.parse(await file.text()) as Record<string, unknown>
+      const raw = JSON.parse(await file.text()) as SlicapSchematicDocument
       const imported = await importSlicapSchematic(raw)
       setDocument(imported)
       setNodes(imported.components.map((component) => ({
         id: component.id,
         type: 'circuit',
-        position: component.position,
+        position: toFlowPosition(component),
         data: { component, definition: definitionFor(component, catalog) },
       })))
       setEdges(imported.wires.map((wire) => ({
@@ -215,7 +304,8 @@ export default function App() {
         target: wire.target.component_id,
         targetHandle: wire.target.pin_id,
         label: wire.net_name,
-        type: 'smoothstep',
+        type: 'wire',
+        data: { waypoints: wire.waypoints },
       })))
       setMessage('已导入 SLiCAP schematic')
     } catch (error) {
@@ -245,10 +335,13 @@ export default function App() {
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={connect}
-            onNodeClick={(_, node) => setSelectedId(node.id)}
+            onNodeClick={(_, node) => { setSelectedId(node.id); setSelectedEdgeId(null) }}
+            onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedId(null) }}
+            onPaneClick={() => { setSelectedId(null); setSelectedEdgeId(null) }}
             connectionMode={ConnectionMode.Loose}
             fitView
             snapToGrid
@@ -264,6 +357,9 @@ export default function App() {
           <label>标题<input value={document.title} onChange={(event) => setDocument({ ...document, title: event.target.value })} /></label>
           {selected ? <>
             <h3>选中器件</h3>
+            {selected.data.component.device === 'JUNCTION' ? (
+              <p className="muted">该节点用于连接三条或更多导线。</p>
+            ) : <>
             <label>RefDes<input value={selected.data.component.refdes} onChange={(event) => updateSelected({ refdes: event.target.value })} /></label>
             <label>Model<input value={selected.data.component.model ?? ''} onChange={(event) => updateSelected({ model: event.target.value || null })} /></label>
             <label>Rotation
@@ -271,6 +367,11 @@ export default function App() {
                 <option value={0}>0 degrees</option><option value={90}>90 degrees</option><option value={180}>180 degrees</option><option value={270}>270 degrees</option>
               </select>
             </label>
+            <div className="transform-row">
+              <button onClick={() => transformSelected('h_flip')}>水平翻转</button>
+              <button onClick={() => transformSelected('v_flip')}>垂直翻转</button>
+              <button onClick={duplicateSelected}>复制</button>
+            </div>
             {selected.data.component.device === 'X' && <label>端口顺序（逗号分隔）<input
               value={pinsFor(selected.data.component, selected.data.definition).join(',')}
               onChange={(event) => updateSelected({
@@ -284,11 +385,26 @@ export default function App() {
               <label key={name}>{name}<input className={value === '?' ? 'invalid' : ''} value={value} onChange={(event) => updateSelected({ parameters: { ...selected.data.component.parameters, [name]: event.target.value } })} /></label>
             ))}
             {(selected.data.component.device === 'F' || selected.data.component.device === 'H') && <label>控制支路<input value={selected.data.component.control_ref ?? ''} onChange={(event) => updateSelected({ control_ref: event.target.value || null })} /></label>}
+            </>}
             <button className="danger" onClick={() => { setNodes((items) => items.filter((node) => node.id !== selectedId)); setEdges((items) => items.filter((edge) => edge.source !== selectedId && edge.target !== selectedId)); setSelectedId(null) }}>删除器件</button>
-          </> : <p className="muted">选择画布中的器件以编辑参数。</p>}
+          </> : selectedEdge ? <>
+            <h3>选中导线</h3>
+            <label>节点名称<input
+              placeholder="例如 in 或 out"
+              value={typeof selectedEdge.label === 'string' ? selectedEdge.label : ''}
+              onChange={(event) => setEdges((items) => items.map((edge) => (
+                edge.id === selectedEdge.id ? { ...edge, label: event.target.value || undefined } : edge
+              )))}
+            /></label>
+            <button className="danger" onClick={() => { setEdges((items) => items.filter((edge) => edge.id !== selectedEdge.id)); setSelectedEdgeId(null) }}>删除导线</button>
+          </> : <p className="muted">选择画布中的器件或导线以编辑属性。</p>}
           <h3>分析端口</h3>
-          <label>Source<input placeholder="V1" value={document.analysis.source ?? ''} onChange={(event) => setDocument({ ...document, analysis: { ...document.analysis, source: event.target.value || null } })} /></label>
-          <label>Detector<input placeholder="V_out" value={document.analysis.detector ?? ''} onChange={(event) => setDocument({ ...document, analysis: { ...document.analysis, detector: event.target.value || null } })} /></label>
+          <label>Source<input list="source-candidates" placeholder="V1" value={document.analysis.source ?? ''} onChange={(event) => setDocument({ ...document, analysis: { ...document.analysis, source: event.target.value || null } })} /></label>
+          <datalist id="source-candidates">{sourceCandidates.map((item) => <option key={item} value={item} />)}</datalist>
+          <label>Detector<input list="detector-candidates" placeholder="V_out" value={document.analysis.detector ?? ''} onChange={(event) => setDocument({ ...document, analysis: { ...document.analysis, detector: event.target.value || null } })} /></label>
+          <datalist id="detector-candidates">{detectorCandidates.map((item) => <option key={item} value={item} />)}</datalist>
+          <label>Loop-gain reference<input list="lgref-candidates" placeholder="E_O1" value={document.analysis.lgref ?? ''} onChange={(event) => setDocument({ ...document, analysis: { ...document.analysis, lgref: event.target.value || null } })} /></label>
+          <datalist id="lgref-candidates">{lgrefCandidates.map((item) => <option key={item} value={item} />)}</datalist>
           <h3>.param</h3>
           <textarea rows={6} placeholder={'R=1k\nC=1u'} value={parameterText(document.parameters)} onChange={(event) => setDocument({ ...document, parameters: parseParameters(event.target.value) })} />
         </aside>

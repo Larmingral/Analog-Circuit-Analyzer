@@ -2,12 +2,20 @@ export type Point = { x: number; y: number }
 
 export type DeviceDefinition = {
   label: string
+  description: string
+  info: string
   prefix: string | null
   model: string | null
+  model_show: boolean
   symbol: string
+  symbol_url: string | null
+  view_box: { x: number; y: number; width: number; height: number }
   pins: string[]
-  refs?: number
+  pin_positions: Record<string, Point>
+  refs: string[]
   defaults: Record<string, string>
+  param_display: Record<string, { show_value: boolean; show_name: boolean }>
+  show_pinnames: boolean
   slicap_defaults?: Record<string, string>
 }
 
@@ -40,6 +48,38 @@ export type SchematicDocument = {
   parameters: Record<string, string>
   analysis: { source: string | null; detector: string | null; lgref: string | null }
   passthrough: Record<string, unknown>
+}
+
+export type SlicapComponentData = {
+  symbol_name: string
+  instance_id: string
+  x: number
+  y: number
+  rotation?: number
+  h_flip?: boolean
+  v_flip?: boolean
+  params?: Record<string, string>
+  model?: string
+  refs?: string[]
+  [key: string]: unknown
+}
+
+export type SlicapWireData = {
+  points: [number, number][]
+  net_name?: string | null
+  user_net_name?: string | null
+  [key: string]: unknown
+}
+
+export type SlicapSchematicDocument = {
+  components: SlicapComponentData[]
+  wires: SlicapWireData[]
+  junctions: { x: number; y: number }[]
+  parameters: Record<string, unknown>[]
+  analysis_items: Record<string, unknown>[]
+  model_defs: Record<string, unknown>[]
+  properties: Record<string, unknown>
+  [key: string]: unknown
 }
 
 export type Diagnostic = {

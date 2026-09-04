@@ -49,14 +49,23 @@ h3 { margin: 18px 0 8px; font-size: 13px; text-transform: uppercase; letter-spac
 .diagnostics .error { background: #ffebe7; color: #9e3327; }
 .diagnostics .warning { background: #fff4d7; color: #805d0b; }
 .diagnostics .info { background: #e8f4f5; color: #245f68; }
-.circuit-node { position: relative; display: grid; place-items: center; min-width: 92px; min-height: 70px; padding: 14px; border: 1.5px solid #29444d; border-radius: 6px; background: #fff; box-shadow: 0 4px 12px rgba(31,57,66,.12); }
+.circuit-node { position: relative; display: grid; place-items: center; width: 106px; height: 106px; padding: 13px; border: 1px solid transparent; border-radius: 8px; background: rgba(255,255,255,.84); }
 .circuit-node.selected { outline: 3px solid rgba(14,135,115,.25); border-color: #087f6b; }
 .node-refdes { position: absolute; top: 4px; left: 7px; font-size: 10px; font-weight: 700; }
-.node-symbol { font: 600 18px Georgia, serif; color: #213a43; }
+.official-symbol { width: 78px; height: 78px; object-fit: contain; pointer-events: none; transform-origin: center; }
+.subcircuit-symbol { display: grid; place-items: center; width: 62px; height: 52px; border: 2px solid #213a43; font: 600 13px Georgia, serif; color: #213a43; }
+.junction-symbol { width: 11px; height: 11px; border-radius: 50%; background: #13242c; }
 .node-value { position: absolute; bottom: 4px; font: 9px "Cascadia Code", monospace; color: #4d646c; }
 .node-value.missing { color: #c24b3b; }
 .circuit-pin { width: 10px !important; height: 10px !important; background: #087f6b !important; border: 2px solid white !important; box-shadow: 0 0 0 1px #087f6b; transform: translate(-50%, -50%) !important; }
-.device-ground, .device-port { min-width: 65px; min-height: 45px; border-style: dashed; }
+.pin-name { position: absolute; translate: 8px -12px; color: #47616b; font: 8px "Cascadia Code", monospace; pointer-events: none; }
+.device-ground, .device-port { width: 74px; height: 74px; }
+.device-junction { width: 34px; height: 34px; padding: 0; background: transparent; }
+.device-junction .node-refdes { display: none; }
+.react-flow__edge-path { stroke: #263f48; stroke-width: 1.6; shape-rendering: geometricPrecision; }
+.wire-label { position: absolute; padding: 1px 4px; border-radius: 3px; background: rgba(248,250,249,.92); color: #087f6b; font: 9px "Cascadia Code", monospace; pointer-events: none; }
+.transform-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin: 8px 0; }
+.transform-row button { padding: 6px 3px; border: 1px solid #c2d0d1; border-radius: 5px; background: #f6f9f8; font-size: 10px; }
 
 @media (max-width: 900px) {
   body { min-width: 0; }
