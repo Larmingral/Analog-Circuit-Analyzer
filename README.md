@@ -88,6 +88,9 @@ cd C:\pr\learning\college\else\sitp_2\github\Analog-Circuit-Analyzer-next
 - FastAPI 文档：`http://127.0.0.1:8000/docs`
 - Gradio 页面：`http://127.0.0.1:7860`
 
+启动器会在创建进程前检查三个端口，发生冲突时报告具体服务和 PID；运行日志保存在
+`runs/service-logs/`。API 和 Vite 由启动器直接跟踪，按 `Ctrl+C` 后不会遗留子进程。
+
 只启动 Web Schematic 与 API：
 
 ```powershell
