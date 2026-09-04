@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "isaca-local"
+version = "0.1.0"
+description = "Local API and web schematic integration for ISACA."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "SLiCAP==5.2.1",
+    "PySide6>=6.8,<7",
+    "fastapi>=0.115,<1",
+    "pydantic>=2.10,<3",
+    "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+ui = ["gradio>=5,<6", "pandas>=2.2", "PyMuPDF>=1.25", "dashscope>=1.20"]
+test = ["httpx2>=0.1", "pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+addopts = "-ra"
